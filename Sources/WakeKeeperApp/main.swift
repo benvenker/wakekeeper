@@ -198,31 +198,24 @@ final class PowerController {
             return
         }
 
-        let shellScript = commands.map(\.shellScript).joined(separator: " && ")
-        let appleScript = "do shell script \(appleScriptLiteral(shellScript)) with administrator privileges"
+        for command in commands {
+            let sudoCommand = PowerCommandFactory.nonInteractiveSudoCommand(for: command)
+            let process = Process()
+            let stderr = Pipe()
+            process.executableURL = URL(fileURLWithPath: sudoCommand.executable)
+            process.arguments = sudoCommand.arguments
+            process.standardOutput = FileHandle.nullDevice
+            process.standardError = stderr
+            try process.run()
+            process.waitUntilExit()
 
-        let process = Process()
-        let stderr = Pipe()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        process.arguments = ["-e", appleScript]
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = stderr
-        try process.run()
-        process.waitUntilExit()
-
-        guard process.terminationStatus == 0 else {
-            let data = stderr.fileHandleForReading.readDataToEndOfFile()
-            let message = String(data: data, encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            throw PowerControllerError.privilegedCommandFailed(message ?? "Administrator approval was cancelled or failed.")
+            guard process.terminationStatus == 0 else {
+                let data = stderr.fileHandleForReading.readDataToEndOfFile()
+                let message = String(data: data, encoding: .utf8)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                throw PowerControllerError.passwordlessSudoUnavailable(message)
+            }
         }
-    }
-
-    private func appleScriptLiteral(_ value: String) -> String {
-        "\"" + value
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
-            .replacingOccurrences(of: "\n", with: "\\n") + "\""
     }
 
     private func saveSnapshot(_ snapshot: PowerSettingsSnapshot) {
@@ -247,12 +240,20 @@ final class PowerController {
 }
 
 enum PowerControllerError: LocalizedError {
-    case privilegedCommandFailed(String)
+    case passwordlessSudoUnavailable(String?)
 
     var errorDescription: String? {
         switch self {
-        case .privilegedCommandFailed(let message):
-            return message
+        case .passwordlessSudoUnavailable(let message):
+            let detail = message.map { "\n\nsudo said: \($0)" } ?? ""
+            return """
+            Passwordless WakeKeeper setup is not installed yet.
+
+            Run:
+            /Users/ben/code/wakekeeper/scripts/install-sudoers.sh
+
+            That asks for your administrator password once, then WakeKeeper can toggle sleep without prompting.\(detail)
+            """
         }
     }
 }

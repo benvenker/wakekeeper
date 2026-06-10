@@ -56,6 +56,10 @@ public enum PowerCommandFactory {
         ShellCommand("/usr/bin/caffeinate", ["-dimsu"])
     }
 
+    public static func nonInteractiveSudoCommand(for command: ShellCommand) -> ShellCommand {
+        ShellCommand("/usr/bin/sudo", ["-n", command.executable] + command.arguments)
+    }
+
     public static func setDisablesleep(_ enabled: Bool) -> ShellCommand {
         ShellCommand("/usr/bin/pmset", ["-a", "disablesleep", enabled ? "1" : "0"])
     }

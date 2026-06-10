@@ -16,6 +16,15 @@ final class PowerCommandFactoryTests: XCTestCase {
         )
     }
 
+    func testNonInteractiveSudoWrapsCommandWithoutPrompting() {
+        XCTAssertEqual(
+            PowerCommandFactory.nonInteractiveSudoCommand(
+                for: ShellCommand("/usr/bin/pmset", ["-a", "disablesleep", "1"])
+            ),
+            ShellCommand("/usr/bin/sudo", ["-n", "/usr/bin/pmset", "-a", "disablesleep", "1"])
+        )
+    }
+
     func testRestoreFallsBackToEnablingNormalSleepWhenNoSnapshotValueExists() {
         XCTAssertEqual(
             PowerCommandFactory.restoreDisablesleepCommands(from: DisablesleepState()),

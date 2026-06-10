@@ -4,3 +4,4 @@
 - Follow TDD for power-setting behavior: test command construction and parsing in `WakeKeeperCore` instead of duplicating implementation logic in tests.
 - Do not run `pmset` mutations in automated tests. Tests should verify the commands that would be run.
 - The app must restore normal sleep settings on toggle-off and normal quit.
+- Passwordless operation uses `/etc/sudoers.d/wakekeeper` and must stay limited to the exact `pmset disablesleep` commands documented in README.md.
