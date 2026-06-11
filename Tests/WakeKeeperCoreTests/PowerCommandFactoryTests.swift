@@ -43,10 +43,4 @@ final class PowerCommandFactoryTests: XCTestCase {
             ]
         )
     }
-
-    func testShellEscapesArgumentsForPrivilegedScript() {
-        let command = ShellCommand("/bin/echo", ["plain", "has spaces", "it's ok"])
-
-        XCTAssertEqual(command.shellScript, "/bin/echo plain 'has spaces' 'it'\\''s ok'")
-    }
 }

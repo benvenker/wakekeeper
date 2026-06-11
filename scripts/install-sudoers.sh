@@ -1,7 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-USER_NAME="${SUDO_USER:-$(id -un)}"
+if [[ "$(id -u)" -eq 0 && -n "${SUDO_USER:-}" ]]; then
+  USER_NAME="$SUDO_USER"
+else
+  USER_NAME="$(id -un)"
+fi
+
+if ! [[ "$USER_NAME" =~ ^[A-Za-z0-9._-]+$ ]] || ! id -u "$USER_NAME" >/dev/null 2>&1; then
+  echo "Refusing to install sudoers rule for invalid user: $USER_NAME" >&2
+  exit 1
+fi
+
 SUDOERS_FILE="/etc/sudoers.d/wakekeeper"
 TMP_FILE="$(mktemp)"
 

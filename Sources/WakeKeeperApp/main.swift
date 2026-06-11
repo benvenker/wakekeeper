@@ -20,8 +20,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        if controller.isAwakeModeEnabled {
+        if controller.needsRestoration {
             try? controller.disableAwakeMode()
+        }
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard controller.needsRestoration else {
+            return .terminateNow
+        }
+
+        do {
+            try controller.disableAwakeMode()
+            refreshMenu()
+            return .terminateNow
+        } catch {
+            refreshMenu()
+            showError(error)
+            return .terminateCancel
         }
     }
 
@@ -55,7 +71,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let isEnabled = controller.isAwakeModeEnabled
         let hasSnapshot = controller.hasSavedSnapshot
 
-        statusMenuItem.title = isEnabled ? "WakeKeeper: keeping agents awake" : "WakeKeeper: normal sleep"
+        if isEnabled {
+            statusMenuItem.title = "WakeKeeper: keeping agents awake"
+        } else if hasSnapshot {
+            statusMenuItem.title = "WakeKeeper: restore needed"
+        } else {
+            statusMenuItem.title = "WakeKeeper: normal sleep"
+        }
+
         toggleMenuItem.title = isEnabled ? "Turn Off" : "Turn On"
         toggleMenuItem.state = isEnabled ? .on : .off
         toggleMenuItem.isEnabled = !isBusy
@@ -110,151 +133,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.alertStyle = .warning
         alert.addButton(withTitle: "OK")
         alert.runModal()
-    }
-}
-
-final class PowerController {
-    private let snapshotKey = "WakeKeeper.savedPowerSettingsSnapshot"
-    private var caffeinateProcess: Process?
-
-    var isAwakeModeEnabled: Bool {
-        caffeinateProcess?.isRunning == true
-    }
-
-    var hasSavedSnapshot: Bool {
-        loadSnapshot() != nil
-    }
-
-    func enableAwakeMode() throws {
-        if !hasSavedSnapshot {
-            let currentState = try readCurrentDisablesleepState()
-            saveSnapshot(PowerSettingsSnapshot(disablesleep: currentState))
-        }
-
-        try runPrivileged([PowerCommandFactory.setDisablesleep(true)])
-        try startCaffeinateIfNeeded()
-    }
-
-    func disableAwakeMode() throws {
-        stopCaffeinate()
-        try restoreNormalSleep()
-    }
-
-    func restoreNormalSleep() throws {
-        let snapshot = loadSnapshot()
-        let commands = PowerCommandFactory.restoreDisablesleepCommands(
-            from: snapshot?.disablesleep ?? DisablesleepState()
-        )
-
-        try runPrivileged(commands)
-        clearSnapshot()
-    }
-
-    private func startCaffeinateIfNeeded() throws {
-        guard caffeinateProcess?.isRunning != true else {
-            return
-        }
-
-        let command = PowerCommandFactory.caffeinateCommand
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: command.executable)
-        process.arguments = command.arguments
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-        try process.run()
-        caffeinateProcess = process
-    }
-
-    private func stopCaffeinate() {
-        guard let process = caffeinateProcess else {
-            return
-        }
-
-        if process.isRunning {
-            process.terminate()
-            process.waitUntilExit()
-        }
-
-        caffeinateProcess = nil
-    }
-
-    private func readCurrentDisablesleepState() throws -> DisablesleepState {
-        let process = Process()
-        let output = Pipe()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/pmset")
-        process.arguments = ["-g", "custom"]
-        process.standardOutput = output
-        process.standardError = FileHandle.nullDevice
-        try process.run()
-        process.waitUntilExit()
-
-        let data = output.fileHandleForReading.readDataToEndOfFile()
-        let text = String(data: data, encoding: .utf8) ?? ""
-        return PMSetParser.parseCustomDisablesleep(text)
-    }
-
-    private func runPrivileged(_ commands: [ShellCommand]) throws {
-        guard !commands.isEmpty else {
-            return
-        }
-
-        for command in commands {
-            let sudoCommand = PowerCommandFactory.nonInteractiveSudoCommand(for: command)
-            let process = Process()
-            let stderr = Pipe()
-            process.executableURL = URL(fileURLWithPath: sudoCommand.executable)
-            process.arguments = sudoCommand.arguments
-            process.standardOutput = FileHandle.nullDevice
-            process.standardError = stderr
-            try process.run()
-            process.waitUntilExit()
-
-            guard process.terminationStatus == 0 else {
-                let data = stderr.fileHandleForReading.readDataToEndOfFile()
-                let message = String(data: data, encoding: .utf8)?
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                throw PowerControllerError.passwordlessSudoUnavailable(message)
-            }
-        }
-    }
-
-    private func saveSnapshot(_ snapshot: PowerSettingsSnapshot) {
-        guard let data = try? JSONEncoder().encode(snapshot) else {
-            return
-        }
-
-        UserDefaults.standard.set(data, forKey: snapshotKey)
-    }
-
-    private func loadSnapshot() -> PowerSettingsSnapshot? {
-        guard let data = UserDefaults.standard.data(forKey: snapshotKey) else {
-            return nil
-        }
-
-        return try? JSONDecoder().decode(PowerSettingsSnapshot.self, from: data)
-    }
-
-    private func clearSnapshot() {
-        UserDefaults.standard.removeObject(forKey: snapshotKey)
-    }
-}
-
-enum PowerControllerError: LocalizedError {
-    case passwordlessSudoUnavailable(String?)
-
-    var errorDescription: String? {
-        switch self {
-        case .passwordlessSudoUnavailable(let message):
-            let detail = message.map { "\n\nsudo said: \($0)" } ?? ""
-            return """
-            Passwordless WakeKeeper setup is not installed yet.
-
-            Run:
-            /Users/ben/code/wakekeeper/scripts/install-sudoers.sh
-
-            That asks for your administrator password once, then WakeKeeper can toggle sleep without prompting.\(detail)
-            """
-        }
     }
 }
 

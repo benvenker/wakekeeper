@@ -38,17 +38,6 @@ public struct ShellCommand: Equatable, Sendable {
         self.arguments = arguments
     }
 
-    public var shellScript: String {
-        ([executable] + arguments).map(Self.shellEscape).joined(separator: " ")
-    }
-
-    public static func shellEscape(_ value: String) -> String {
-        if value.range(of: #"^[A-Za-z0-9_/\-.:=]+$"#, options: .regularExpression) != nil {
-            return value
-        }
-
-        return "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
-    }
 }
 
 public enum PowerCommandFactory {
