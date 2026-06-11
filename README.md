@@ -9,28 +9,31 @@ When you turn it on, it does two things:
 
 When you turn it off or quit normally, it restores the previous `disablesleep` setting and stops `caffeinate`. If the app is force-quit or the Mac restarts while awake mode is on, launch WakeKeeper again; it will show that restoration is needed, and you can either choose **Restore Normal Sleep** or quit normally to restore the saved setting.
 
-## Build
+## Run Locally
+
+```sh
+./script/build_and_run.sh
+```
+
+Use `./script/build_and_run.sh` during development. It stops any stale WakeKeeper process, checks the one-time sudoers setup, installs it when missing, rebuilds the current source, and launches the fresh app bundle. macOS may ask for your administrator password the first time so the script can install `/etc/sudoers.d/wakekeeper`.
+
+Set `WAKEKEEPER_SKIP_SUDOERS_SETUP=1` if you only want to rebuild and launch without touching `/etc/sudoers.d`.
+
+## Build Only
 
 ```sh
 swift test
-./script/build_and_run.sh
 ./scripts/build-app.sh
 open build/WakeKeeper.app
 ```
 
-Use `./script/build_and_run.sh` during development so any stale WakeKeeper process is stopped before the current source is rebuilt and launched. `./scripts/build-app.sh` only builds the bundle.
+`./scripts/build-app.sh` only builds the bundle; it does not install permissions.
 
-The run script also checks the one-time sudoers setup and installs it when missing, so development usually starts with just `./script/build_and_run.sh`. Set `WAKEKEEPER_SKIP_SUDOERS_SETUP=1` if you only want to rebuild and launch without touching `/etc/sudoers.d`.
+## Passwordless Permission
 
-## One-Time Passwordless Setup
+`pmset` needs root privileges to change `disablesleep`. To avoid an administrator password prompt every time you toggle WakeKeeper, WakeKeeper uses a narrow sudoers rule. The development run script installs this automatically when needed.
 
-`pmset` needs root privileges to change `disablesleep`. To avoid an administrator password prompt every time you toggle WakeKeeper, install the sudoers rule once. The development run script does this automatically when needed, or you can run it directly:
-
-```sh
-./scripts/install-sudoers.sh
-```
-
-The installer writes the rule for the current user, or for the original `SUDO_USER` when run through `sudo`, and refuses unexpected user names before validating the file with `visudo`.
+The installer writes the rule for the current user and refuses unexpected user names before validating the file with `visudo`.
 
 The rule allows your user to run only these commands without a password:
 
